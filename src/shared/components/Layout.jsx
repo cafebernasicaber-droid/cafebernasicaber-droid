@@ -1,0 +1,199 @@
+// ─────────────────────────────────────────────────────────────
+//  src/shared/components/Layout.jsx
+//  REEMPLAZA el archivo existente — versión con scroll fix definitivo
+//
+//  CAUSA RAÍZ DEL BUG (Layout original):
+//    useLayoutEffect corre SINCRÓNICAMENTE antes del paint del DOM.
+//    En ese momento React ya desmontó/remontó el nav,
+//    por lo que navRef.current.scrollTop es 0 aunque guardamos el valor.
+//    El navegador lo resetea después de que useLayoutEffect corre.
+//
+//  SOLUCIÓN:
+//    1. Escuchar el evento 'scroll' nativo del nav para guardar
+//       la posición en tiempo real (no solo al hacer click).
+//    2. Restaurar con requestAnimationFrame, que corre DESPUÉS
+//       de que el navegador termina de pintar — garantiza que
+//       el DOM está listo y el scroll se aplica correctamente.
+//    3. Eliminar useLayoutEffect del scroll del nav.
+// ─────────────────────────────────────────────────────────────
+
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import './Layout.css';
+
+const icons = {
+  dashboard:    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>,
+  roles:        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
+  usuarios:     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>,
+  clientes:     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+  insumos:      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>,
+  proveedores:  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+  compras:      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>,
+  pedidos:      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>,
+  empleados:    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+  productos:    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>,
+  categorias:   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>,
+  adiciones:    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>,
+  combos:       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 12V22H4V12"/><path d="M22 7H2v5h20V7z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>,
+  toppings:     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12"/><path d="M12 6v6l4 2"/></svg>,
+  ventas:       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>,
+  devoluciones: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 10h10a8 8 0 0 1 8 8v2M3 10l6 6m-6-6l6-6"/></svg>,
+  fichas:       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
+  promociones:  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>,
+  logout:       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
+  user:         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+};
+
+const NAV_GROUPS = [
+  { label: 'Principal', items: [
+    { path: '/admin/dashboard', label: 'Dashboard',      icon: icons.dashboard,    match: p => p === '/admin/dashboard' },
+  ]},
+  { label: 'Administración', items: [
+    { path: '/admin/roles',    label: 'Roles',           icon: icons.roles,        match: p => p.startsWith('/admin/roles') },
+    { path: '/admin/usuarios', label: 'Usuarios',        icon: icons.usuarios,     match: p => p.startsWith('/admin/usuarios') },
+    { path: '/empleados',      label: 'Empleados',       icon: icons.empleados,    match: p => p.startsWith('/empleados') },
+    { path: '/admin/clientes', label: 'Clientes',        icon: icons.clientes,     match: p => p.startsWith('/admin/clientes') },
+    { path: '/proveedores',    label: 'Proveedores',     icon: icons.proveedores,  match: p => p.startsWith('/proveedores') },
+  ]},
+  { label: 'Inventario', items: [
+    { path: '/insumos',        label: 'Insumos',         icon: icons.insumos,      match: p => p.startsWith('/insumos') },
+    { path: '/categorias',     label: 'Categorías',      icon: icons.categorias,   match: p => p.startsWith('/categorias') },
+    { path: '/productos',      label: 'Productos',       icon: icons.productos,    match: p => p.startsWith('/productos') },
+  ]},
+  { label: 'Menú & Carta', items: [
+    { path: '/fichas-tecnicas',label: 'Fichas técnicas', icon: icons.fichas,       match: p => p.startsWith('/fichas-tecnicas') },
+    { path: '/adiciones',      label: 'Adiciones',       icon: icons.adiciones,    match: p => p.startsWith('/adiciones') },
+    { path: '/combos',         label: 'Combos',          icon: icons.combos,       match: p => p.startsWith('/combos') },
+    { path: '/toppings',       label: 'Toppings',        icon: icons.toppings,     match: p => p.startsWith('/toppings') },
+  ]},
+  { label: 'Ventas', items: [
+    { path: '/compras',        label: 'Compras',         icon: icons.compras,      match: p => p.startsWith('/compras') },
+    { path: '/pedidos',        label: 'Pedidos',         icon: icons.pedidos,      match: p => p.startsWith('/pedidos') },
+    { path: '/ventas',         label: 'Ventas',          icon: icons.ventas,       match: p => p.startsWith('/ventas') },
+  ]},
+  { label: 'Operaciones', items: [
+    { path: '/devoluciones',   label: 'Devoluciones',    icon: icons.devoluciones, match: p => p.startsWith('/devoluciones') },
+  ]},
+];
+
+const Layout = ({ children }) => {
+  const { user, logout } = useAuth();
+  const navigate         = useNavigate();
+  const location         = useLocation();
+  const [showLogout, setShowLogout] = useState(false);
+
+  const contentRef     = useRef(null);
+  const navRef         = useRef(null);
+  // Ref que guarda la posición del scroll del nav en tiempo real
+  const savedNavScroll = useRef(0);
+
+  // ── FIX SCROLLBAR ──────────────────────────────────────────
+  // 1. Escuchar el evento 'scroll' nativo del nav.
+  //    Esto actualiza savedNavScroll.current en tiempo real,
+  //    independientemente de cómo se navegue (click, redirect, etc.)
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const onScroll = () => { savedNavScroll.current = el.scrollTop; };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []); // solo al montar — el listener persiste toda la sesión
+
+  // 2. Al cambiar de ruta:
+  //    a) Subir el contenido principal al top
+  //    b) Restaurar el scroll del nav con rAF (después del paint)
+  useEffect(() => {
+    // Subir el contenido principal
+    if (contentRef.current) contentRef.current.scrollTop = 0;
+
+    // Restaurar nav scroll — rAF garantiza que el DOM ya fue pintado
+    const saved = savedNavScroll.current;
+    if (!saved) return; // si era 0, no hacer nada
+    const frame = requestAnimationFrame(() => {
+      if (navRef.current) navRef.current.scrollTop = saved;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [location.pathname]);
+  // ───────────────────────────────────────────────────────────
+
+  const handleLogout  = () => { logout(); navigate('/login'); };
+  const handleNavClick = useCallback((path) => { navigate(path); }, [navigate]);
+
+  return (
+    <div className="layout-root">
+      <aside className="sidebar">
+        <div className="sidebar-logo">
+          <div className="sidebar-logo-circle">
+            <svg width="52" height="52" viewBox="0 0 80 80" fill="none">
+              <circle cx="40" cy="40" r="38" stroke="white" strokeWidth="2.5"/>
+              <circle cx="40" cy="40" r="30" stroke="white" strokeWidth="1.5" strokeDasharray="3 3"/>
+              <path d="M25 30 Q25 28 27 28 L53 28 Q55 28 55 30 L52 52 Q52 54 50 54 L30 54 Q28 54 28 52 Z" fill="none" stroke="white" strokeWidth="2"/>
+              <path d="M55 34 Q62 34 62 40 Q62 46 55 46" stroke="white" strokeWidth="2" fill="none"/>
+              <path d="M32 24 Q34 20 36 24" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+              <path d="M38 22 Q40 18 42 22" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+              <path d="M44 24 Q46 20 48 24" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+            </svg>
+          </div>
+          <span className="sidebar-brand">SICABER</span>
+          <span className="sidebar-tagline">Sistema de Gestión</span>
+        </div>
+
+        <nav className="sidebar-nav" ref={navRef}>
+          {NAV_GROUPS.map(group => (
+            <div className="sidebar-group" key={group.label}>
+              <span className="sidebar-group-label">{group.label}</span>
+              {group.items.map(item => (
+                <button
+                  key={item.path}
+                  className={`sidebar-nav-item ${item.match(location.pathname) ? 'active' : ''}`}
+                  onClick={() => handleNavClick(item.path)}
+                >
+                  {item.icon}{item.label}
+                </button>
+              ))}
+            </div>
+          ))}
+        </nav>
+
+        <div className="sidebar-bottom">
+          <div className="sidebar-user">
+            <div className="sidebar-avatar">{user?.username?.charAt(0)?.toUpperCase()}</div>
+            <div className="sidebar-user-info">
+              <span className="sidebar-username">{user?.username}</span>
+              <span className="sidebar-role">{user?.role || 'Administrador'}</span>
+            </div>
+          </div>
+          <button className="btn-logout" onClick={() => setShowLogout(true)}>
+            {icons.logout} Salir
+          </button>
+        </div>
+      </aside>
+
+      <main className="layout-main">
+        <header className="topbar">
+          <div className="topbar-right">
+            <div className="topbar-user">{icons.user}<span>{user?.username}</span></div>
+          </div>
+        </header>
+        <div className="layout-content" ref={contentRef}>{children}</div>
+      </main>
+
+      {showLogout && (
+        <div className="modal-overlay" onClick={() => setShowLogout(false)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-icon modal-icon-warn">{icons.logout}</div>
+            <h3>¿Cerrar sesión?</h3>
+            <p>¿Estás seguro de que deseas salir del sistema?</p>
+            <div className="modal-actions">
+              <button className="btn-cancel" onClick={() => setShowLogout(false)}>Cancelar</button>
+              <button className="btn-confirm-danger" onClick={handleLogout}>Sí, salir</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Layout;

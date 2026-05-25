@@ -1,0 +1,266 @@
+﻿import React, { useState } from 'react';
+import Layout from '../../../shared/components/Layout';
+import useEmpleados from '../hooks/useEmpleados';
+import empleadosService from '../services/empleadosService';
+import './EmpleadosPage.css';
+
+const fmt = iso => iso ? new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' }).format(new Date(iso)) : '—';
+
+const CARGO_COLORS = {
+  'Barista': { bg: '#E8F5E9', color: '#2E7D32' },
+  'Cajero': { bg: '#E3F2FD', color: '#1565C0' },
+  'Domiciliario': { bg: '#FFF8E1', color: '#F57F17' },
+  'Administrador': { bg: '#FFEBEE', color: '#B71C1C' },
+  'Asistente': { bg: '#F3E5F5', color: '#6A1B9A' },
+};
+
+function EmpleadoModal({ initial, onClose, onSave }) {
+  const cargos = empleadosService.getCargos();
+  const [form, setForm] = useState(initial || { nombre: '', cargo: '', telefono: '', correo: '', activo: true, tipoDoc: 'Cédula de Ciudadanía', numeroDoc: '', direccion: '', username: '', password: '' });
+  const esLoginCargo = ['cajero', 'bartender'].some(c => (form.cargo || '').toLowerCase().includes(c));
+  const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = e => {
+    e.preventDefault(); setError('');
+    if (form.password && form.password !== confirm) { setError('Las contraseñas no coinciden.'); return; }
+    const r = initial
+      ? empleadosService.update(initial.id, form)
+      : empleadosService.create(form);
+    if (r.error) { setError(r.error); return; }
+    onSave();
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" style={{ maxWidth: 480, textAlign: 'left', padding: '32px 36px' }} onClick={e => e.stopPropagation()}>
+        <h3 style={{ marginBottom: 4 }}>{initial ? 'Editar empleado' : 'Nuevo empleado'}</h3>
+        <p style={{ fontSize: 13, color: '#888', marginBottom: 20 }}>
+          {initial ? `Modificando: ${initial.nombre}` : 'Agrega un empleado al equipo'}
+        </p>
+        {error && <div style={{ background:'#FFEBEE',color:'#B71C1C',padding:'10px 14px',borderRadius:8,marginBottom:16,fontSize:13 }}>⚠ {error}</div>}
+        <form onSubmit={handleSubmit} style={{ display:'flex', flexDirection:'column', gap:14 }}>
+          <div className="emp-form-row">
+            <div className="emp-form-group">
+              <label>Nombre completo *</label>
+              <input type="text" required value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})} placeholder="Nombre del empleado" />
+            </div>
+            <div className="emp-form-group">
+              <label>Cargo *</label>
+              <select required value={form.cargo} onChange={e => setForm({...form, cargo: e.target.value})}>
+                <option value="">Seleccionar cargo...</option>
+                {cargos.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="emp-form-row">
+            <div className="emp-form-group">
+              <label>Teléfono</label>
+              <input type="tel" value={form.telefono||''} onChange={e => setForm({...form, telefono: e.target.value})} placeholder="300 000 0000" />
+            </div>
+            <div className="emp-form-group">
+              <label>Correo</label>
+              <input type="email" value={form.correo||''} onChange={e => setForm({...form, correo: e.target.value})} placeholder="correo@ejemplo.com" />
+            </div>
+          </div>
+          <div className="emp-form-row">
+            <div className="emp-form-group">
+              <label>Tipo de documento</label>
+              <select value={form.tipoDoc} onChange={e => setForm({...form, tipoDoc: e.target.value})}>
+                <option>Cédula de Ciudadanía</option>
+                <option>Tarjeta de Identidad</option>
+                <option>Cédula de Extranjería</option>
+                <option>Pasaporte</option>
+              </select>
+            </div>
+            <div className="emp-form-group">
+              <label>Número de documento *</label>
+              <input type="text" required value={form.numeroDoc||''} onChange={e => setForm({...form, numeroDoc: e.target.value})} placeholder="Ej: 1234567890" />
+            </div>
+          </div>
+          <div className="emp-form-row">
+            <div className="emp-form-group" style={{gridColumn:'1/-1'}}>
+              <label>Dirección de residencia</label>
+              <input type="text" value={form.direccion||''} onChange={e => setForm({...form, direccion: e.target.value})} placeholder="Ej: Calle 10 # 43-20" />
+            </div>
+          </div>
+          <div className="emp-form-row">
+            <div className="emp-form-group" style={{gridColumn:'1/-1'}}>
+              <label>
+                Usuario del sistema {esLoginCargo ? '*' : '(opcional)'}
+                {esLoginCargo && <span style={{fontSize:11,color:'#1565C0',marginLeft:6}}>requerido para iniciar sesión</span>}
+              </label>
+              <input
+                type="text"
+                required={esLoginCargo && !initial}
+                value={form.username||''}
+                onChange={e => setForm({...form, username: e.target.value})}
+                placeholder="Usuario con el que iniciará sesión"
+              />
+            </div>
+          </div>
+          <div className="emp-form-row">
+            <div className="emp-form-group">
+              <label>{initial ? 'Nueva contraseña (dejar en blanco para no cambiar)' : 'Contraseña *'}</label>
+              <input type="password" required={!initial} value={form.password||''} onChange={e => setForm({...form, password: e.target.value})} placeholder="Mín. 6 caracteres" />
+            </div>
+            <div className="emp-form-group">
+              <label>{initial ? 'Confirmar nueva contraseña' : 'Confirmar contraseña *'}</label>
+              <input type="password" required={!initial} value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Repite la contraseña"
+                style={{borderColor: confirm && form.password && confirm !== form.password ? '#E53935' : confirm && form.password && confirm === form.password ? '#4CAF50' : ''}}/>
+              {confirm && form.password && confirm !== form.password && <div style={{fontSize:11,color:'#E53935',marginTop:3}}>Las contraseñas no coinciden</div>}
+              {confirm && form.password && confirm === form.password && <div style={{fontSize:11,color:'#4CAF50',marginTop:3}}>✓ Coinciden</div>}
+            </div>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <label className="emp-switch">
+              <input type="checkbox" checked={form.activo} onChange={e => setForm({...form, activo: e.target.checked})} />
+              <span className="emp-slider"/>
+            </label>
+            <span style={{ fontSize:13, fontWeight:600, color: form.activo ? '#2E7D32' : '#888' }}>
+              {form.activo ? 'Activo' : 'Inactivo'}
+            </span>
+          </div>
+          <div className="modal-actions" style={{ justifyContent:'flex-end', marginTop:4 }}>
+            <button type="button" className="btn-cancel" onClick={onClose}>Cancelar</button>
+            <button type="submit" className="btn-confirm-primary">{initial ? '💾 Guardar cambios' : '✅ Crear empleado'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+export default function EmpleadosPage() {
+  const { empleados, refresh, toggleActivo, remove } = useEmpleados();
+  const [modal, setModal]         = useState(null); // null | 'new' | empleado
+  const [deleteTarget, setDel]    = useState(null);
+  const [query, setQuery]         = useState('');
+  const [success, setSuccess]     = useState('');
+
+  const shownFiltered = query.trim()
+    ? empleados.filter(e => e.nombre.toLowerCase().includes(query.toLowerCase()) || e.cargo.toLowerCase().includes(query.toLowerCase()))
+    : empleados;
+  const shown = [...shownFiltered].sort((a, b) => Number(b.id) - Number(a.id));
+
+  const showOk = msg => { setSuccess(msg); setTimeout(() => setSuccess(''), 3000); };
+
+  const handleDelete = () => {
+    remove(deleteTarget.id);
+    showOk(`Empleado "${deleteTarget.nombre}" eliminado`);
+    setDel(null);
+  };
+
+  return (
+    <Layout>
+      <div style={{ position:'relative' }}>
+        {success && <div className="toast toast-success">✓ {success}</div>}
+
+        {(modal === 'new' || (modal && modal.id)) && (
+          <EmpleadoModal
+            initial={modal === 'new' ? null : modal}
+            onClose={() => setModal(null)}
+            onSave={() => { refresh(); setModal(null); showOk(modal === 'new' ? 'Empleado creado correctamente' : 'Empleado actualizado'); }}
+          />
+        )}
+
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">Gestión de Empleados</h1>
+            <p className="page-subtitle">Administra el equipo de trabajo</p>
+          </div>
+          <button className="btn-add" onClick={() => setModal('new')}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Agregar empleado
+          </button>
+        </div>
+
+        <div className="insumos-toolbar">
+          <div className="search-group">
+            <div className="search-wrap">
+              <span className="search-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </span>
+              <input className="search-input" placeholder="Buscar por nombre o cargo..." value={query} onChange={e => setQuery(e.target.value)} />
+              {query && <button className="search-clear" onClick={() => setQuery('')}>✕</button>}
+            </div>
+          </div>
+          <span style={{ fontSize:13, color:'#888', marginLeft:'auto' }}>{shown.length} empleado{shown.length!==1?'s':''}</span>
+        </div>
+
+        <div className="insumos-card">
+          {shown.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">👤</div>
+              <h3>{query ? 'Sin coincidencias' : 'No hay empleados'}</h3>
+              <p>{query ? `Sin resultados para "${query}"` : 'Agrega el primer empleado'}</p>
+              {!query && <button className="btn-add" onClick={() => setModal('new')}>Agregar empleado</button>}
+            </div>
+          ) : (
+            <div className="table-wrap">
+              <table className="insumos-table">
+                <thead>
+                  <tr><th>Empleado</th><th>Cargo</th><th>Teléfono</th><th>Correo</th><th>Ingreso</th><th>Estado</th><th>Acciones</th></tr>
+                </thead>
+                <tbody>
+                  {shown.map(e => {
+                    const cfg = CARGO_COLORS[e.cargo] || { bg: '#F5F5F5', color: '#555' };
+                    return (
+                      <tr key={e.id}>
+                        <td>
+                          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                            <div className="emp-avatar">{e.nombre.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}</div>
+                            <div>
+                              <div style={{ fontWeight:700, fontSize:13, color:'#1A1A1A' }}>{e.nombre}</div>
+                              <div style={{ fontSize:11, color:'#aaa' }}>ID #{e.id}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td><span className="badge-cat" style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.color}33` }}>{e.cargo}</span></td>
+                        <td style={{ fontSize:13, color:'#555' }}>{e.telefono || '—'}</td>
+                        <td style={{ fontSize:13, color:'#555' }}>{e.correo || '—'}</td>
+                        <td style={{ fontSize:12, color:'#aaa' }}>{fmt(e.fechaIngreso)}</td>
+                        <td>
+                          <button className={`toggle-btn ${e.activo ? 'toggle-on' : 'toggle-off'}`} onClick={() => toggleActivo(e.id)}>
+                            <span className="toggle-thumb"/>
+                          </button>
+                        </td>
+                        <td>
+                          <div className="actions-group">
+                            <button className="btn-ver" title="Editar" onClick={() => setModal(e)}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            </button>
+                            <button className="btn-anular" title="Anular" onClick={() => setDel(e)}>
+                              ✕ Anular
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {deleteTarget && (
+          <div className="modal-overlay" onClick={() => setDel(null)}>
+            <div className="modal-box" onClick={e => e.stopPropagation()}>
+              <div className="modal-icon modal-icon-danger">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+              </div>
+              <h3>¿Anular empleado?</h3>
+              <p>Esta acción es <strong>permanente</strong>.</p>
+              <div className="modal-detail">"{deleteTarget.nombre}"</div>
+              <div className="modal-actions">
+                <button className="btn-cancel" onClick={() => setDel(null)}>Cancelar</button>
+                <button className="btn-confirm-danger" onClick={handleDelete}>Sí, anular</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </Layout>
+  );
+}
