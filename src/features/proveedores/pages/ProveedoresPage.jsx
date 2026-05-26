@@ -424,7 +424,7 @@ const ProveedoresPage = () => {
               <table className="insumos-table">
                 <thead>
                   <tr>
-                    <th>ID</th><th>Nombre</th><th>NIT / RUT</th>
+                    <th>Nombre</th><th>NIT / RUT</th>
                     <th>Teléfono</th><th>Ciudad</th><th>Categoría</th>
                     <th>Estado</th><th>Acciones</th>
                   </tr>
@@ -432,7 +432,6 @@ const ProveedoresPage = () => {
                 <tbody>
                   {displayed.map(p => (
                     <tr key={p.id}>
-                      <td className="td-id" style={{ fontFamily:'monospace',fontSize:11 }}>{p.id}</td>
                       <td className="td-nombre">{p.nombre}</td>
                       <td>{p.nit}</td>
                       <td>{p.telefono}</td>
@@ -446,18 +445,18 @@ const ProveedoresPage = () => {
                       </td>
                       <td>
                         <div className="actions-group">
-                          <button className="btn-ver" onClick={() => openVer(p)} title="Ver detalle">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
-                            </svg>
+                          <button className="btn-accion btn-accion-ver" onClick={() => openVer(p)} title="Ver detalle">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                            Ver
                           </button>
-                          <button className="btn-editar" onClick={() => openEditar(p)} title="Editar">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                            </svg>
+                          <button className="btn-accion btn-accion-editar" onClick={() => openEditar(p)} title="Editar">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            Editar
                           </button>
-                          <button className="btn-anular" onClick={() => openDeleteTarget(p)}>✕ Eliminar</button>
+                          <button className="btn-accion btn-accion-eliminar" onClick={() => openDeleteTarget(p)}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                            Eliminar
+                          </button>
                         </div>
                       </td>
                     </tr>

@@ -120,24 +120,20 @@
 .toggle-off .toggle-thumb { left: 3px; }
 
 /* ── ACTION BUTTONS ──────────────────────────────────────────── */
-.actions-group { display: flex; align-items: center; gap: 4px; }
-.btn-ver, .btn-editar {
-  width: 30px; height: 30px; padding: 0; border-radius: 8px; border: none;
-  background: rgba(76,175,80,.08); color: #4CAF50;
-  font-size: 12px; font-weight: 600;
-  display: flex; align-items: center; justify-content: center; gap: 4px;
-  transition: all .15s; cursor: pointer;
+.actions-group { display: flex; align-items: center; gap: 5px; }
+.btn-accion {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 5px 10px; border-radius: 8px; border: none;
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: all .15s; white-space: nowrap;
 }
-.btn-ver:hover { background: #4CAF50; color: rgb(0, 95, 8); transform: scale(1.05); }
-.btn-editar:hover { background: #4CAF50; color: rgb(0, 95, 8);  transform: scale(1.05); }
-.btn-anular {
-  padding: 4px 10px; border-radius: 8px; border: none;
-  background: rgba(229,57,53,.08); color: #E53935;
-  font-size: 12px; font-weight: 600;
-  display: flex; align-items: center; justify-content: center; gap: 4px;
-  transition: all .15s; cursor: pointer;
+.btn-accion-ver    { background: rgba(76,175,80,.1);  color: #2E7D32; }
+.btn-accion-editar { background: rgba(33,150,243,.1); color: #1565C0; }
+.btn-accion-eliminar { background: rgba(229,57,53,.1); color: #C62828; }
+.btn-accion-ver:hover     { background: #4CAF50; color: white; transform: scale(1.04); }
+.btn-accion-editar:hover  { background: #1976D2; color: white; transform: scale(1.04); }
+.btn-accion-eliminar:hover{ background: #E53935; color: white; transform: scale(1.04); }
 }
-.btn-anular:hover { background: #E53935; color: white; transform: scale(1.05); }
 
 /* ── TOAST ───────────────────────────────────────────────────── */
 .toast {
