@@ -1,0 +1,191 @@
+.form-page-root { position: relative; }
+
+/* BREADCRUMB */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.breadcrumb-link {
+  background: none;
+  border: none;
+  color: #4CAF50;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s;
+}
+
+.breadcrumb-link:hover { color: #388E3C; text-decoration: underline; }
+
+/* HEADER */
+.form-page-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.form-page-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.form-page-icon-add { background: linear-gradient(135deg, #4CAF50, #388E3C); color: white; }
+.form-page-icon-edit { background: linear-gradient(135deg, #6D4C41, #4E342E); color: white; }
+.form-page-icon-view { background: linear-gradient(135deg, #555555, #2C2C2C); color: white; }
+
+.form-page-header h1 {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.form-page-header p {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* CARD */
+.form-card {
+  background: var(--bg-surface);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  padding: 32px;
+}
+
+/* NOT FOUND */
+.not-found-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 60px 0;
+  text-align: center;
+}
+
+.not-found-state h3 { font-size: 20px; font-weight: 700; color: var(--text-primary); }
+.not-found-state p { font-size: 14px; color: var(--text-secondary); }
+
+.btn-outline-green {
+  margin-top: 8px;
+  padding: 10px 20px;
+  background: transparent;
+  border: 1.5px solid #4CAF50;
+  border-radius: 8px;
+  color: #388E3C;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+.btn-outline-green:hover { background: rgba(76,175,80,0.08); }
+
+.loading-state {
+  padding: 60px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 15px;
+}
+
+/* TOAST (duplicated here for standalone pages) */
+.toast {
+  position: fixed;
+  top: 24px;
+  right: 28px;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  animation: slideInRight 0.3s ease;
+}
+
+.toast-success {
+  background: #E8F5E9;
+  color: #2E7D32;
+  border: 1px solid #A5D6A7;
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.empty-icon {
+  width: 80px; height: 80px; border-radius: 50%;
+  background: var(--bg-surface-3);
+  display: flex; align-items: center; justify-content: center;
+  color: #CCCCCC; margin-bottom: 8px;
+}
+.empty-icon-search { background: #FFF8E1; color: #F9A825; }
+
+/* ════════════════════════════════════════════════════════════
+   THEME PATCH — form pages & ver pages
+   ════════════════════════════════════════════════════════════ */
+.mod-form-card, .form-card, .ver-section, .proveedor-card {
+  background: var(--bg-surface) !important;
+  border-color: var(--border) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+.mod-form-group label, .form-group label, .field-label {
+  color: var(--text-secondary) !important;
+}
+.mod-form-group input,
+.mod-form-group select,
+.mod-form-group textarea,
+.form-group input,
+.form-group select,
+.form-group textarea,
+.form-input {
+  background: var(--bg-input) !important;
+  border-color: var(--border-input) !important;
+  color: var(--text-primary) !important;
+}
+.mod-form-group input::placeholder,
+.form-group input::placeholder { color: var(--text-muted) !important; }
+.mod-form-group input:focus,
+.mod-form-group select:focus,
+.mod-form-group textarea:focus,
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  border-color: var(--color-green) !important;
+  box-shadow: 0 0 0 3px var(--color-green-glow) !important;
+}
+.mod-form-footer { border-top-color: var(--border) !important; }
+/* Ver page titles & values */
+.ver-header-left h1 { color: var(--text-primary) !important; }
+.ver-section__title { color: var(--text-secondary) !important; }
+.field-row .label, .ver-label { color: var(--text-muted) !important; }
+.field-row .value, .ver-value { color: var(--text-primary) !important; }
+/* Breadcrumb */
+.breadcrumb      { color: var(--text-secondary) !important; }
+.breadcrumb-link { color: var(--color-green) !important; }
+.breadcrumb-nav  { color: var(--text-secondary) !important; }
+.breadcrumb-nav span { color: var(--color-green) !important; }
+.breadcrumb-nav em   { color: var(--text-muted) !important; }
+/* Section dividers */
+.ver-section__divider { border-color: var(--border) !important; }
+/* CompraForm / InsumoForm shared panels */
+.compra-form__section { background: var(--bg-surface) !important; border-color: var(--border) !important; }
+.compra-form__label { color: var(--text-secondary) !important; }
+.compra-form__input, .compra-form__select {
+  background: var(--bg-input) !important;
+  border-color: var(--border-input) !important;
+  color: var(--text-primary) !important;
+}
