@@ -28,16 +28,20 @@ function CartThumb({ src, alt }) {
 }
 
 function LxPersonalizar({ producto, toppings, adiciones, onAdd, onClose }) {
-  const GRATIS_MAX = 2;
-  // Los toppings vienen seleccionados por defecto; el cliente puede
-  // desactivarlos haciendo clic si no los quiere.
-  const [topsSelec, setTops]   = useState(() => toppings);
+  const MAX_TOPPINGS = 2;
+  // Los toppings vienen seleccionados por defecto (hasta el máximo permitido);
+  // el cliente puede desactivarlos haciendo clic si no los quiere. Los
+  // toppings nunca tienen costo, pero sí hay un límite de cantidad.
+  const [topsSelec, setTops]   = useState(() => toppings.slice(0, MAX_TOPPINGS));
   const [adicsSelec, setAdics] = useState([]);
-  const topsGratis  = topsSelec.filter(t => t.gratuito || t.precio === 0);
-  const topsPago    = topsSelec.filter(t => !t.gratuito && t.precio > 0);
-  const gratisExtra = topsGratis.length > GRATIS_MAX ? topsGratis.slice(GRATIS_MAX).reduce((s,t)=>s+(t.precio||0),0) : 0;
-  const extraTotal  = topsPago.reduce((s,t)=>s+t.precio,0) + adicsSelec.reduce((s,a)=>s+a.precio,0) + gratisExtra;
-  const toggleTop  = t => setTops(p  => p.find(x=>x.id===t.id) ? p.filter(x=>x.id!==t.id) : [...p,t]);
+  const extraTotal  = adicsSelec.reduce((s,a)=>s+a.precio,0);
+  const limiteToppingsAlcanzado = topsSelec.length >= MAX_TOPPINGS;
+  const toggleTop  = t => setTops(p => {
+    const yaSeleccionado = p.find(x=>x.id===t.id);
+    if (yaSeleccionado) return p.filter(x=>x.id!==t.id);
+    if (p.length >= MAX_TOPPINGS) return p; // no se puede pasar del máximo
+    return [...p, t];
+  });
   const toggleAdic = a => setAdics(p => p.find(x=>x.id===a.id) ? p.filter(x=>x.id!==a.id) : [...p,a]);
 
   return (
@@ -65,7 +69,7 @@ function LxPersonalizar({ producto, toppings, adiciones, onAdd, onClose }) {
               {topsSelec.map(t => (
                 <div key={t.id} style={{fontSize:12, color:'var(--lx-text)', display:'flex', justifyContent:'space-between', marginBottom:4, alignItems:'center'}}>
                   <span>· {t.nombre}</span>
-                  <span style={{color:'var(--lx-green)', fontWeight:600, fontSize:11}}>{(t.gratuito||t.precio===0)?'Gratis':'+'+fmt(t.precio)}</span>
+                  <span style={{color:'var(--lx-green)', fontWeight:600, fontSize:11}}>Gratis</span>
                 </div>
               ))}
               {adicsSelec.map(a => (
@@ -93,23 +97,27 @@ function LxPersonalizar({ producto, toppings, adiciones, onAdd, onClose }) {
         {toppings.length > 0 && (
           <div style={{marginBottom:20}}>
             <div style={{fontSize:12, fontWeight:700, letterSpacing:1, textTransform:'uppercase', color:'var(--lx-muted)', marginBottom:10}}>
-              Toppings <span style={{fontWeight:400}}>({GRATIS_MAX} gratis · los demás tienen costo)</span>
+              Toppings <span style={{fontWeight:400}}>(máx. {MAX_TOPPINGS}, sin costo)</span>
             </div>
             <div style={{display:'flex', flexWrap:'wrap', gap:8}}>
               {toppings.map(t => {
                 const sel = topsSelec.find(x=>x.id===t.id);
-                const esGratis = t.gratuito || t.precio === 0;
-                const gratuitos = topsSelec.filter(x=>x.gratuito||x.precio===0).length;
-                const cobrarEste = esGratis && !sel && gratuitos >= GRATIS_MAX;
+                const deshabilitado = !sel && limiteToppingsAlcanzado;
                 return (
-                  <button key={t.id} onClick={() => toggleTop(t)} style={{padding:'8px 16px', borderRadius:100, fontSize:12, fontWeight:600, cursor:'pointer', border:`1.5px solid ${sel?'var(--gold)':'rgba(14,12,7,.14)'}`, background:sel?'rgba(76,175,80,0.15)':'var(--bg-hover)', color:sel?'var(--lx-text)':'var(--lx-muted)', transition:'all .2s'}}>
+                  <button key={t.id} onClick={() => toggleTop(t)} disabled={deshabilitado}
+                    style={{padding:'8px 16px', borderRadius:100, fontSize:12, fontWeight:600, cursor:deshabilitado?'not-allowed':'pointer', border:`1.5px solid ${sel?'var(--gold)':'rgba(14,12,7,.14)'}`, background:sel?'rgba(76,175,80,0.15)':'var(--bg-hover)', color:sel?'var(--lx-text)':'var(--lx-muted)', opacity:deshabilitado?0.45:1, transition:'all .2s'}}>
                     {t.nombre}
-                    {esGratis && !cobrarEste ? <span style={{color:'var(--lx-green)', marginLeft:4}}>Gratis</span> : <span style={{color:'var(--gold)', marginLeft:4}}>+{fmt(t.precio)}</span>}
+                    <span style={{color:'var(--lx-green)', marginLeft:4}}>Gratis</span>
                     {sel && <span style={{marginLeft:5, color:'var(--gold)'}}>✓</span>}
                   </button>
                 );
               })}
             </div>
+            {limiteToppingsAlcanzado && (
+              <div style={{fontSize:11, color:'var(--lx-muted)', marginTop:6}}>
+                Ya elegiste el máximo de {MAX_TOPPINGS} toppings. Quita uno para elegir otro.
+              </div>
+            )}
           </div>
         )}
         {adiciones.length > 0 && (
@@ -686,6 +694,11 @@ export default function Landing() {
   const getAdicionesPorProducto = (prod) => prod
     ? TODAS_ADICIONES.filter(a => a.categoria === prod.categoria || a.categoria === 'Especiales')
     : TODAS_ADICIONES;
+  // productos_ids vacío (o ausente) significa "este topping aplica a
+  // todos los productos"; si tiene ids, solo se muestra para esos.
+  const getToppingsPorProducto = (prod) => prod
+    ? TOPPINGS_DISP.filter(t => !Array.isArray(t.productos_ids) || t.productos_ids.length === 0 || t.productos_ids.includes(prod.id))
+    : TOPPINGS_DISP;
 
   useEffect(() => {
     productosService.getActivos()
@@ -818,7 +831,16 @@ export default function Landing() {
   };
 
   const updateQty  = (cartKey,d) => setCart(prev => prev.map(i => i._cartKey===cartKey?{...i,qty:Math.max(0,i.qty+d)}:i).filter(i=>i.qty>0));
-  const cartTotal  = cart.reduce((s,i) => s+(i.precioFinal||i.precio||i.price)*i.qty, 0);
+  // Precio unitario real de un ítem del carrito: se recalcula desde el
+  // catálogo (PRODUCTS) por id, en vez de depender únicamente de
+  // precioFinal/precio guardados en el objeto del carrito, que podían
+  // quedar vacíos y hacían que el precio y el total se mostraran en $0.
+  const precioUnitarioItem = (item) => {
+    const prodCatalogo = PRODUCTS.find(x => String(x.id) === String(item.id));
+    const base = prodCatalogo ? Number(prodCatalogo.precio ?? prodCatalogo.price ?? 0) : 0;
+    return base > 0 ? base : Number(item.precioFinal || item.precio || item.price || 0);
+  };
+  const cartTotal  = cart.reduce((s,i) => s + precioUnitarioItem(i) * i.qty, 0);
   const cartCount  = cart.reduce((s,i) => s+i.qty, 0);
 
   // "Volver a comprar": toma los productos de un pedido anterior y los
@@ -1535,7 +1557,7 @@ const handleLogin = async e => {
                     <button className="lx-card__add" disabled={!hayStock}
                       style={hayStock ? {} : {opacity:0.4,cursor:'not-allowed',filter:'grayscale(1)'}}
                       title={hayStock ? 'Agregar al carrito' : 'Producto sin insumos disponibles'}
-                      onClick={() => hayStock && ((TOPPINGS_DISP.length > 0 || ADICIONES_DISP.length > 0) ? openPersonalizar({...p,precio:precioCarrito}) : addToCart({...p,precio:precioCarrito}))}>
+                      onClick={() => hayStock && ((getToppingsPorProducto(p).length > 0 || ADICIONES_DISP.length > 0) ? openPersonalizar({...p,precio:precioCarrito}) : addToCart({...p,precio:precioCarrito}))}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                     </button>
                   </div>
@@ -1710,7 +1732,7 @@ const handleLogin = async e => {
               {cart.map(item => {
                 const imgSrc = item.imagen || item.img || null;
                 const nombre = item.nombre || item.name || 'Producto';
-                const precio = (item.precioFinal || item.precio || item.price || 0);
+                const precio = precioUnitarioItem(item);
                 const precioOriginal = item._precioOriginal || null;
                 const ahorro = precioOriginal ? (precioOriginal - precio) * item.qty : null;
                 return (
@@ -1720,7 +1742,8 @@ const handleLogin = async e => {
                       <strong>{nombre}</strong>
                       {Array.isArray(item.toppings) && item.toppings.length > 0 && <span className="lx-drawer__extras">{item.toppings.map(t=>t.nombre).join(", ")}</span>}
                       {Array.isArray(item.adiciones) && item.adiciones.length > 0 && <span className="lx-drawer__addons">{item.adiciones.map(a=>a.nombre).join(", ")}</span>}
-                      <span className="lx-drawer__price">{fmt(precio * item.qty)}</span>
+                      <span className="lx-drawer__price">{fmt(precio)} c/u</span>
+                      <span className="lx-drawer__price">Subtotal: {fmt(precio * item.qty)}</span>
                       {ahorro > 0 && (
                         <span style={{fontSize:11,fontWeight:700,color:'var(--lx-green)',background:'rgba(76,175,80,0.12)',padding:'2px 7px',borderRadius:10,marginTop:2,display:'inline-block'}}>
                           Ahorras {fmt(ahorro)}
@@ -2025,7 +2048,7 @@ const handleLogin = async e => {
                   style={{justifyContent:'center'}}>
                   Agregar uno igual (sin adiciones)
                 </button>
-                {(TOPPINGS_DISP.length > 0 || ADICIONES_DISP.length > 0) && (
+                {(getToppingsPorProducto(modalDuplicar).length > 0 || ADICIONES_DISP.length > 0) && (
                   <button className="lx-btn lx-btn--full"
                     style={{background:'rgba(76,175,80,0.15)',color:'#4CAF50',border:'1.5px solid rgba(76,175,80,0.3)',justifyContent:'center'}}
                     onClick={() => { setModalDuplicar(null); setModalPersonalizar(modalDuplicar); }}>
@@ -2046,7 +2069,7 @@ const handleLogin = async e => {
         <div className="lx-modal-mask" onClick={() => setModalPersonalizar(null)}>
           <div className="lx-modal" style={{maxWidth:720, padding:0, overflow:'hidden'}} onClick={e=>e.stopPropagation()}>
             <button className="lx-modal__x" onClick={() => setModalPersonalizar(null)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-            <LxPersonalizar producto={modalPersonalizar} toppings={TOPPINGS_DISP} adiciones={getAdicionesPorProducto(modalPersonalizar)} onAdd={addToCartWithExtras} onClose={() => setModalPersonalizar(null)}/>
+            <LxPersonalizar producto={modalPersonalizar} toppings={getToppingsPorProducto(modalPersonalizar)} adiciones={getAdicionesPorProducto(modalPersonalizar)} onAdd={addToCartWithExtras} onClose={() => setModalPersonalizar(null)}/>
           </div>
         </div>
       )}

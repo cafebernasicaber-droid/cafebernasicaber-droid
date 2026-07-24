@@ -51,6 +51,12 @@ const ProveedorForm = ({ initialData, onSubmit, onCancel, isEditing, duplicateFi
     const { name, value, type, checked } = e.target;
     if (type === 'checkbox' && name === 'estado') {
       setForm(prev => ({ ...prev, estado: checked ? 'Activo' : 'Inactivo' }));
+    } else if (name === 'telefono') {
+      const soloNumeros = value.replace(/\D/g, '').slice(0, 10);
+      setForm(prev => ({ ...prev, telefono: soloNumeros }));
+    } else if (name === 'nit') {
+      const soloNumerosGuion = value.replace(/[^0-9-]/g, '').slice(0, 12);
+      setForm(prev => ({ ...prev, nit: soloNumerosGuion }));
     } else {
       setForm(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
     }
@@ -82,7 +88,7 @@ const ProveedorForm = ({ initialData, onSubmit, onCancel, isEditing, duplicateFi
 
         <div className={`fg ${errors.nit ? 'fg-error' : ''}`}>
           <label>NIT / RUT <span className="req">*</span></label>
-          <input type="text" name="nit" value={form.nit}
+          <input type="text" name="nit" value={form.nit} inputMode="numeric" maxLength={12}
             onChange={handleChange} placeholder="Ej: 900123456-1" />
           <span style={{ fontSize:12,color:'var(--text-muted)',marginTop:4,display:'block' }}>Formato: 900123456-1</span>
           {errors.nit && <span className="err-msg">{errors.nit}</span>}
@@ -90,7 +96,7 @@ const ProveedorForm = ({ initialData, onSubmit, onCancel, isEditing, duplicateFi
 
         <div className={`fg ${errors.telefono ? 'fg-error' : ''}`}>
           <label>Teléfono <span className="req">*</span></label>
-          <input type="text" name="telefono" value={form.telefono}
+          <input type="text" name="telefono" value={form.telefono} inputMode="numeric" maxLength={10}
             onChange={handleChange} placeholder="Ej: 3001234567" />
           {errors.telefono && <span className="err-msg">{errors.telefono}</span>}
         </div>

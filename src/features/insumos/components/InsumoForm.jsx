@@ -71,7 +71,7 @@ const InsumoForm = ({ initialData, onSubmit, onCancel, isEditing, serverError })
   const [proveedores, setProveedores] = useState([]);
   useEffect(() => {
     proveedoresService.getAll()
-      .then(d => setProveedores(Array.isArray(d) ? d : []))
+      .then(d => setProveedores(Array.isArray(d) ? d.filter(p => p.estado === 'Activo') : []))
       .catch(() => setProveedores([]));
   }, []);
 
