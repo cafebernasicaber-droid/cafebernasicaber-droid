@@ -56,6 +56,9 @@ export const ESTADO_CONFIG = {
   pendiente:  { label: 'Pendiente',  color: '#F57F17', bg: '#FFF8E1' },
   en_proceso: { label: 'En Proceso', color: '#1565C0', bg: '#E3F2FD' },
   listo:      { label: 'Listo',      color: '#2E7D32', bg: '#E8F5E9' },
+  // Solo aplica a pedidos a domicilio: el pedido ya salió del local rumbo
+  // al cliente. Es un paso intermedio entre "Listo" y "Entregado".
+  en_camino:  { label: 'En camino',  color: '#00838F', bg: '#E0F7FA' },
   entregado:  { label: 'Entregado',  color: '#388E3C', bg: '#F1F8E9' },
   cancelado:  { label: 'Cancelado',  color: '#B71C1C', bg: '#FFEBEE' },
   // Faltaba: los pedidos "detenidos" (vista "En Stop") usan este estado y

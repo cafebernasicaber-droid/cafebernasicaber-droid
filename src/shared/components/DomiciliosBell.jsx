@@ -17,14 +17,15 @@ import { useNavigate } from 'react-router-dom';
 import pedidosService from '../../features/pedidos/services/pedidosService';
 import './DomiciliosBell.css';
 
-const ESTADOS_ACTIVOS = ['pendiente_verificacion', 'pendiente', 'en_proceso', 'en_preparacion', 'listo'];
+const ESTADOS_ACTIVOS = ['pendiente_verificacion', 'pendiente', 'en_proceso', 'en_preparacion', 'listo', 'en_camino'];
 
 const ESTADO_LABEL = {
   pendiente_verificacion: 'Por verificar pago',
   pendiente:      'Pendiente',
-  en_proceso:     'En camino',
+  en_proceso:     'Preparando',
   en_preparacion: 'En preparación',
   listo:          'Listo para salir',
+  en_camino:      'En camino',
 };
 
 const fmtProductos = (productos) => {

@@ -4,6 +4,8 @@ import proveedoresService from '../../proveedores/services/proveedoresService';
 import insumosService from '../../insumos/services/insumosService';
 import { uploadToCloudinary } from '../../../shared/services/cloudinaryService';
 import { validarArchivoComprobante, procesarComprobante } from '../../../shared/services/ocrService';
+import ImageLightbox from '../../../shared/components/ImageLightbox';
+import '../../../shared/components/ImageLightbox.css';
 import './CompraForm.css';
 
 const EMPTY_ITEM = { insumo: '', cantidad: '', precioUnitario: '', unidad: '' };
@@ -39,6 +41,7 @@ const CompraForm = ({ onSubmit, onCancel, serverError }) => {
   const [comprobanteOk, setComprobanteOk]       = useState(false); // true solo si el total coincidió
   const [totalDetectadoOCR, setTotalDetectadoOCR] = useState(null);
   const [comprobantePreview, setComprobantePreview] = useState('');
+  const [zoomComprobante, setZoomComprobante] = useState(false);
   const comprobanteInputRef = useRef();
   const [arrastrandoComprobante, setArrastrandoComprobante] = useState(false);
 
@@ -381,7 +384,13 @@ const CompraForm = ({ onSubmit, onCancel, serverError }) => {
           }}
         >
           {comprobantePreview ? (
-            <img src={comprobantePreview} alt="Comprobante" style={{ maxWidth: 200, maxHeight: 200, borderRadius: 8, margin: '0 auto', display: 'block' }} />
+            <div style={{ position: 'relative', width: '100%', height: 220 }}>
+              <img src={comprobantePreview} alt="Comprobante" style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 8, display: 'block' }} />
+              <button type="button" className="ilb-zoom-trigger" title="Ver completo / Zoom"
+                onClick={e => { e.stopPropagation(); setZoomComprobante(true); }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+              </button>
+            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, color: 'var(--text-muted)' }}>
               <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -395,6 +404,16 @@ const CompraForm = ({ onSubmit, onCancel, serverError }) => {
           accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
           onChange={e => handleComprobanteFile(e.target.files?.[0] || null)}
         />
+        {comprobantePreview && (
+          <button type="button" onClick={() => setZoomComprobante(true)}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', marginTop: 8, padding: '7px 0', borderRadius: 8, border: '1.5px solid var(--border-input)', background: 'transparent', color: 'var(--text-primary)', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Ver comprobante completo
+          </button>
+        )}
+        {zoomComprobante && comprobantePreview && (
+          <ImageLightbox src={comprobantePreview} alt="Comprobante de compra" onClose={() => setZoomComprobante(false)} />
+        )}
 
         {procesandoOCR && (
           <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 10, background: 'var(--bg-surface-2, #F5F5F5)', border: '1px solid rgba(0,0,0,.06)' }}>

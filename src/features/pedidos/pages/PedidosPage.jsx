@@ -6,14 +6,17 @@ import clientesService from '../../clientes/services/clientesService';
 import productosService from '../../productos/services/productosService';
 import adicionesService from '../../adiciones/services/adicionesService';
 import ventasService from '../../ventas/services/ventasService';
+import notificacionesService from '../../notificaciones/services/notificacionesService';
 import { ESTADO_CONFIG } from '../data/datos';
 import './PedidosPage.css';
+
+const METODOS_PAGO_LABEL = { bancolombia: 'Bancolombia', nequi: 'Nequi', daviplata: 'Daviplata', transferencia: 'Transferencia Bancaria', efectivo: 'Efectivo en caja' };
 
 const fmt = n => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(n || 0);
 const POR_PAGINA = 8;
 
 /* ── MODAL DETALLE ── */
-function ModalDetalle({ pedido, onClose, onCambiarEstado }) {
+function ModalDetalle({ pedido, onClose, onCambiarEstado, onAprobarPago, onRechazarPago }) {
   const cfg = ESTADO_CONFIG[pedido.estado] || {};
   // El backend guarda los productos en la columna "items" y la imagen del
   // comprobante en "comprobante_img". El listado ya tenía este fallback,
@@ -87,8 +90,8 @@ function ModalDetalle({ pedido, onClose, onCambiarEstado }) {
         <div className="pd-modal-actions">
           {pedido.estado === 'pendiente_verificacion' && onCambiarEstado ? (
             <>
-              <button className="btn-anular" onClick={() => { onCambiarEstado(pedido.id, 'cancelado'); onClose(); }}>✕ Rechazar pago</button>
-              <button className="btn-add" onClick={() => { onCambiarEstado(pedido.id, 'en_proceso'); onClose(); }}>✓ Aprobar pago</button>
+              <button className="btn-anular" onClick={() => { onClose(); onRechazarPago ? onRechazarPago(pedido) : onCambiarEstado(pedido.id, 'cancelado'); }}>✕ Rechazar pago</button>
+              <button className="btn-add" onClick={() => { onClose(); onAprobarPago ? onAprobarPago(pedido) : onCambiarEstado(pedido.id, 'en_proceso'); }}>✓ Aprobar pago</button>
             </>
           ) : (
             <button className="btn-cancel" onClick={onClose}>Cerrar</button>
@@ -408,6 +411,8 @@ export default function PedidosPage() {
   const [pagina,       setPagina]   = useState(1);
   const [success,      setSuccess]  = useState('');
 const [vista,         setVista]   = useState('activos'); 
+  const [rechazoTarget, setRechazoTarget] = useState(null); // pedido en proceso de rechazo (para pedir motivo)
+  const [rechazoMotivo, setRechazoMotivo] = useState('');
   const refresh = async () => {
     const [p, s] = await Promise.allSettled([pedidosService.getAll(), pedidosService.getStats()]);
     if (p.status === 'fulfilled') setPedidos(p.value || []);
@@ -438,8 +443,8 @@ const [vista,         setVista]   = useState('activos');
 
   const cambiarEstado = async (id, nuevoEstado) => {
     const pedidoActual = pedidos.find(p => p.id === id);
-    if (pedidoActual && (pedidoActual.estado === 'listo' || pedidoActual.estado === 'entregado')) {
-      if (nuevoEstado !== 'listo' && nuevoEstado !== 'entregado') return;
+    if (pedidoActual && (pedidoActual.estado === 'listo' || pedidoActual.estado === 'entregado' || pedidoActual.estado === 'en_camino')) {
+      if (nuevoEstado !== 'listo' && nuevoEstado !== 'entregado' && nuevoEstado !== 'en_camino') return;
     }
     if (pedidoActual && pedidoActual.estado === 'pendiente_verificacion') {
       if (nuevoEstado !== 'en_proceso' && nuevoEstado !== 'cancelado') return;
@@ -458,6 +463,36 @@ const [vista,         setVista]   = useState('activos');
     await refresh();
   };
 
+  // ── Aprobar / Rechazar pago (módulo "Pagos pendientes") ──────────────────
+  // Además de cambiar el estado, se le avisa al cliente mediante el sistema
+  // de notificaciones de la landing (localStorage, sin backend nuevo).
+  const aprobarPago = async (pedido) => {
+    await cambiarEstado(pedido.id, 'en_proceso');
+    notificacionesService.create({
+      clienteId: pedido.cliente_id,
+      pedidoId: pedido.id,
+      tipo: 'pago_aprobado',
+      mensaje: '✅ Tu pago fue aprobado correctamente. Ya estamos preparando tu pedido.',
+    });
+    showOk(`Pago del pedido #${pedido.id} aprobado`);
+  };
+
+  const abrirRechazo = (pedido) => { setRechazoMotivo(''); setRechazoTarget(pedido); };
+
+  const confirmarRechazo = async () => {
+    if (!rechazoTarget) return;
+    const motivo = rechazoMotivo.trim() || 'No pudimos verificar tu comprobante de pago.';
+    await cambiarEstado(rechazoTarget.id, 'cancelado');
+    notificacionesService.create({
+      clienteId: rechazoTarget.cliente_id,
+      pedidoId: rechazoTarget.id,
+      tipo: 'pago_rechazado',
+      mensaje: `❌ Tu pago fue rechazado. Motivo: ${motivo}. Puedes volver a comprar y subir un nuevo comprobante desde "Mis pedidos".`,
+    });
+    showOk(`Pago del pedido #${rechazoTarget.id} rechazado`);
+    setRechazoTarget(null);
+  };
+
   const handleDelete = async () => {
   await pedidosService.cambiarEstado(deleteTarget.id, 'anulado');
   await refresh();
@@ -467,6 +502,7 @@ const [vista,         setVista]   = useState('activos');
 
   const enStop = pedidos.filter(p => p.estado === 'anulado');
 const activos = pedidos.filter(p => p.estado !== 'anulado');
+const pagosPendientes = pedidos.filter(p => p.estado === 'pendiente_verificacion');
 const base = vista === 'stop' ? enStop : activos;
 
 const lq = buscar.toLowerCase().trim();
@@ -498,7 +534,29 @@ const filtrados = lq
         {error   && <div className="toast toast-error">⚠ {error}</div>}
         {modal      && <ModalPedido onClose={() => setModal(false)} onSave={guardar} />}
         {editTarget && <ModalPedido pedido={editTarget} onClose={() => setEditTarget(null)} onSave={guardar} />}
-        {detalle && <ModalDetalle onClose={() => setDetalle(null)} pedido={detalle} onCambiarEstado={cambiarEstado} />}
+        {detalle && <ModalDetalle onClose={() => setDetalle(null)} pedido={detalle} onCambiarEstado={cambiarEstado} onAprobarPago={aprobarPago} onRechazarPago={abrirRechazo} />}
+        {rechazoTarget && (
+          <div className="modal-overlay" onClick={() => setRechazoTarget(null)}>
+            <div className="modal-box" onClick={e => e.stopPropagation()}>
+              <div className="modal-icon modal-icon-danger">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+              </div>
+              <h3>Rechazar pago del pedido #{rechazoTarget.id}</h3>
+              <p>Cuéntale al cliente por qué se rechazó su comprobante. Este motivo se le notificará.</p>
+              <textarea
+                className="pd-alt-address__input"
+                style={{width:'100%',minHeight:80,resize:'vertical',fontFamily:'inherit',fontSize:13,padding:10,borderRadius:8,border:'1.5px solid var(--border)',marginTop:8}}
+                placeholder="Ej: El valor del comprobante no coincide con el total del pedido."
+                value={rechazoMotivo}
+                onChange={e => setRechazoMotivo(e.target.value)}
+              />
+              <div className="modal-actions">
+                <button className="btn-cancel" onClick={() => setRechazoTarget(null)}>Cancelar</button>
+                <button className="btn-confirm-danger" onClick={confirmarRechazo}>✕ Confirmar rechazo</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="page-header">
           <div>
@@ -533,7 +591,69 @@ const filtrados = lq
   >
     ⏸ En Stop {enStop.length > 0 ? `(${enStop.length})` : ''}
   </button>
+  <button
+    onClick={() => { setVista('pagos'); setPagina(1); }}
+    className={vista==='pagos' ? 'btn-confirm-primary' : 'btn-cancel'}
+    style={vista!=='pagos' && pagosPendientes.length>0 ? {borderColor:'#AD1457',color:'#AD1457'} : undefined}
+  >
+    💳 Pagos pendientes {pagosPendientes.length > 0 ? `(${pagosPendientes.length})` : ''}
+  </button>
 </div>
+          {vista === 'pagos' ? (
+            pagosPendientes.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-icon">
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                </div>
+                <h3>No hay pagos por verificar</h3>
+                <p>Cuando un cliente suba un comprobante o confirme por WhatsApp, aparecerá aquí.</p>
+              </div>
+            ) : (
+              <div className="table-wrap">
+                <table className="insumos-table">
+                  <thead>
+                    <tr><th>N° Pedido</th><th>Cliente</th><th>Método</th><th>Valor</th><th>Fecha</th><th>Hora</th><th>Comprobante</th><th>Estado</th><th>Acciones</th></tr>
+                  </thead>
+                  <tbody>
+                    {pagosPendientes.map(p => {
+                      const comprobanteImg = p.comprobanteImg || p.comprobante_img || null;
+                      const fecha = p.created_at ? new Date(p.created_at).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+                      const hora  = p.hora || (p.created_at ? new Date(p.created_at).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '—');
+                      return (
+                        <tr key={p.id}>
+                          <td className="td-id">#{p.id}</td>
+                          <td className="td-nombre">{p.cliente || p.mesa || '—'}</td>
+                          <td>{METODOS_PAGO_LABEL[p.pago] || p.pago || '—'}</td>
+                          <td style={{fontWeight:700,color:'#2E7D32',fontSize:13}}>{fmt(p.total)}</td>
+                          <td style={{fontSize:12,color:'var(--text-muted)'}}>{fecha}</td>
+                          <td style={{fontSize:12,color:'var(--text-muted)'}}>{hora}</td>
+                          <td>
+                            {comprobanteImg ? (
+                              <img src={comprobanteImg} alt="Comprobante" onClick={() => window.open(comprobanteImg,'_blank')}
+                                style={{width:44,height:44,objectFit:'cover',borderRadius:8,border:'1.5px solid var(--border)',cursor:'zoom-in'}}/>
+                            ) : (
+                              <span style={{fontSize:11,color:'var(--text-muted)'}}>{p.comprobante === 'Enviado por WhatsApp' ? '📱 WhatsApp' : 'Sin imagen'}</span>
+                            )}
+                          </td>
+                          <td><span className="pd-badge" style={{background:ESTADO_CONFIG.pendiente_verificacion.bg,color:ESTADO_CONFIG.pendiente_verificacion.color}}>{ESTADO_CONFIG.pendiente_verificacion.label}</span></td>
+                          <td>
+                            <div className="actions-group">
+                              <button className="btn-ver" title="Ver detalle" onClick={() => setDetalle(p)}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                              </button>
+                              <button className="btn-anular" title="Rechazar pago" onClick={() => abrirRechazo(p)}>✕ Rechazar</button>
+                              <button className="btn-add" title="Aprobar pago" onClick={() => aprobarPago(p)}>✓ Aprobar</button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )
+          ) : (
+          <>
           <div className="pd-toolbar">
             <div className="search-group">
               <div className="search-wrap">
@@ -591,13 +711,15 @@ const filtrados = lq
                         <td>
                           {p.estado==='anulado' ? (
                             <span className="pd-badge" style={{background:cfg.bg,color:cfg.color}}>{cfg.label}</span>
-                          ) : (p.estado==='listo'||p.estado==='entregado') ? (
+                          ) : (p.estado==='listo'||p.estado==='entregado'||p.estado==='en_camino') ? (
                             <select className="pd-estado-select" value={p.estado} style={{background:cfg.bg,color:cfg.color,borderColor:cfg.color+'55'}} onChange={e => cambiarEstado(p.id, e.target.value)}>
                               <option value="listo">{ESTADO_CONFIG.listo?.label||'Listo'}</option>
+                              {p.tipo==='domicilio' && <option value="en_camino">{ESTADO_CONFIG.en_camino?.label||'En camino'}</option>}
                               <option value="entregado">{ESTADO_CONFIG.entregado?.label||'Entregado'}</option>
                             </select>
                           ) : p.estado==='pendiente_verificacion' ? (
-                            <select className="pd-estado-select" value={p.estado} style={{background:cfg.bg,color:cfg.color,borderColor:cfg.color+'55'}} onChange={e => cambiarEstado(p.id, e.target.value)}>
+                            <select className="pd-estado-select" value={p.estado} style={{background:cfg.bg,color:cfg.color,borderColor:cfg.color+'55'}}
+                              onChange={e => e.target.value==='en_proceso' ? aprobarPago(p) : e.target.value==='cancelado' ? abrirRechazo(p) : null}>
                               <option value="pendiente_verificacion">{ESTADO_CONFIG.pendiente_verificacion?.label||'Verificar pago'}</option>
                               <option value="en_proceso">✓ Aprobar pago</option>
                               <option value="cancelado">✕ Rechazar pago</option>
@@ -646,6 +768,8 @@ const filtrados = lq
               <button className="btn-cancel" disabled={pagina===totalPags} onClick={() => setPagina(p=>Math.min(totalPags,p+1))}>Siguiente</button>
               <span style={{fontSize:12,color:'var(--text-muted)',marginLeft:8}}>{ordenados.length} registros · Pág {pagina}/{totalPags}</span>
             </div>
+          )}
+          </>
           )}
         </div>
 

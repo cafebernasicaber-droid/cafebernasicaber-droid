@@ -152,7 +152,7 @@ function ModalFormInsumo({ insumo, prefill, onCreate, onUpdate, onClose, onManag
 
 // ── Modal: Gestionar categorías de insumos ───────────────────────────────────
 function ModalCategoriasInsumo({ onClose }) {
-  const { categorias, create, update, remove, toggleEstado, recategorizar } = useCategoriasInsumos();
+  const { categorias, create, update, remove, recategorizar } = useCategoriasInsumos();
   const [nombre, setNombre] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -276,14 +276,6 @@ function ModalCategoriasInsumo({ onClose }) {
                     <>
                       <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{c.nombre}</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <button
-                          onClick={() => toggleEstado(c.id)}
-                          className={`toggle-btn ${c.estado === 'Activo' ? 'toggle-on' : 'toggle-off'}`}
-                          title={c.estado === 'Activo' ? 'Activa — clic para desactivar' : 'Inactiva — clic para activar'}
-                          style={{ cursor: 'pointer' }}
-                        >
-                          <span className="toggle-thumb" />
-                        </button>
                         <button onClick={() => startEdit(c)} title="Editar nombre"
                           style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,.08)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>

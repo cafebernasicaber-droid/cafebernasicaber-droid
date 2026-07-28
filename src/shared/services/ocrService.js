@@ -46,6 +46,25 @@ export const validarArchivoComprobante = (file) => {
   return { valid: true };
 };
 
+// ── Validación de comprobante del CLIENTE (checkout landing) ────────────────
+// A diferencia de validarArchivoComprobante (usada en Compras, que sí acepta
+// PDF), el checkout del cliente solo debe aceptar imágenes — JPG, JPEG, PNG
+// y WEBP — sin PDF ni ningún otro formato, con un límite de 5 MB, según lo
+// definido para el módulo de pagos de la landing.
+const EXTENSIONES_CLIENTE_PERMITIDAS = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+const TAMANO_MAXIMO_CLIENTE_MB = 5;
+
+export const validarComprobanteCliente = (file) => {
+  if (!file) return { valid: false, error: 'No se seleccionó ningún archivo.' };
+  if (!EXTENSIONES_CLIENTE_PERMITIDAS.includes(file.type)) {
+    return { valid: false, error: 'Solo se permiten imágenes JPG, JPEG, PNG y WEBP.' };
+  }
+  if (file.size > TAMANO_MAXIMO_CLIENTE_MB * 1024 * 1024) {
+    return { valid: false, error: 'El archivo supera el tamaño máximo permitido de 5 MB.' };
+  }
+  return { valid: true };
+};
+
 // ── Calidad de imagen (resolución, brillo, nitidez) ─────────────────────────
 const cargarImagenEnCanvas = (file) => new Promise((resolve, reject) => {
   const img = new Image();
@@ -71,18 +90,13 @@ export const analizarCalidadImagen = async (file) => {
   try {
     const { canvas, ctx, anchoOriginal, altoOriginal } = await cargarImagenEnCanvas(file);
 
-    // 1) Resolución mínima — una foto muy pequeña no tiene suficiente
-    // detalle para leer texto de un comprobante con confianza.
-    if (anchoOriginal < 400 || altoOriginal < 300) {
-      return { ok: false, error: 'La imagen del comprobante no tiene la calidad suficiente para ser procesada. Por favor suba una fotografía clara, completa y legible.' };
-    }
-
-    // 1b) Proporción extrema (una tira muy angosta o muy alargada) suele
-    // indicar que la foto quedó recortada y no muestra el comprobante
-    // completo.
-    const proporcion = Math.max(anchoOriginal, altoOriginal) / Math.min(anchoOriginal, altoOriginal);
-    if (proporcion > 4) {
-      return { ok: false, error: 'La imagen del comprobante no tiene la calidad suficiente para ser procesada. Por favor suba una fotografía clara, completa y legible.' };
+    // 1) Resolución mínima — solo bloquea imágenes verdaderamente
+    // minúsculas (thumbnails, capturas rotas). Antes el piso era 400x300,
+    // lo que rechazaba capturas de pantalla recortadas de apps de pago
+    // (Nequi/Daviplata/Bancolombia) que son perfectamente legibles pero
+    // más pequeñas que una foto.
+    if (anchoOriginal < 250 || altoOriginal < 180) {
+      return { ok: false, error: 'La imagen es demasiado pequeña para procesarla. Sube una captura o foto de mayor resolución.' };
     }
 
     const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -97,18 +111,18 @@ export const analizarCalidadImagen = async (file) => {
     }
     const brilloPromedio = sumaBrillo / n; // 0 (negro) – 255 (blanco)
 
-    // 2) Brillo — demasiado oscura o demasiado sobreexpuesta impide leer el
-    // texto igual de bien que un desenfoque.
-    if (brilloPromedio < 40) {
-      return { ok: false, error: 'La imagen del comprobante no tiene la calidad suficiente para ser procesada. Por favor suba una fotografía clara, completa y legible.' };
-    }
-    if (brilloPromedio > 235) {
-      return { ok: false, error: 'La imagen del comprobante no tiene la calidad suficiente para ser procesada. Por favor suba una fotografía clara, completa y legible.' };
-    }
+    // 2) Brillo — solo bloquea extremos reales (foto totalmente negra o
+    // totalmente blanca/quemada, señal de que algo salió mal al tomarla).
+    // El rango anterior (40-235) rechazaba capturas de apps con fondos
+    // oscuros (modo oscuro) o muy claros, que sí se leen bien.
+    const brilloOk = brilloPromedio >= 8 && brilloPromedio <= 250;
 
-    // 3) Nitidez — varianza de un operador tipo Laplaciano. Una imagen
-    // borrosa tiene transiciones de brillo mucho más suaves (varianza
-    // baja) que una nítida con bordes de letras marcados.
+    // 3) Nitidez — varianza de un operador tipo Laplaciano. Sirve para
+    // detectar fotos borrosas de papel, pero las capturas de pantalla de
+    // apps de pago (fondos sólidos, poco "ruido" visual) dan varianzas
+    // naturalmente más bajas que una foto sin por eso ser ilegibles. Se
+    // baja el umbral y, sobre todo, ya no se usa como bloqueo aislado:
+    // ver procesarComprobante, donde el OCR real tiene la última palabra.
     const w = canvas.width, h = canvas.height;
     let sumaLap = 0, sumaLap2 = 0, cuenta = 0;
     for (let y = 1; y < h - 1; y++) {
@@ -122,14 +136,13 @@ export const analizarCalidadImagen = async (file) => {
     }
     const media = sumaLap / cuenta;
     const varianza = sumaLap2 / cuenta - media * media;
+    const nitidezOk = varianza >= 12;
 
-    // Umbral empírico: fotos nítidas de texto suelen dar varianzas altas
-    // (cientos o miles); una imagen borrosa cae muy por debajo.
-    if (varianza < 60) {
-      return { ok: false, error: 'La imagen del comprobante no tiene la calidad suficiente para ser procesada. Por favor suba una fotografía clara, completa y legible.' };
-    }
-
-    return { ok: true, metrics: { brilloPromedio, varianza, ancho: anchoOriginal, alto: altoOriginal } };
+    // Ya no se rechaza aquí solo por brillo/nitidez — esas señales pueden
+    // dar falsos negativos en capturas de pantalla legítimas. Se devuelven
+    // como "sospechosas" para que procesarComprobante decida con el OCR
+    // real como criterio definitivo.
+    return { ok: true, sospechosa: !brilloOk || !nitidezOk, metrics: { brilloPromedio, varianza, ancho: anchoOriginal, alto: altoOriginal } };
   } catch (err) {
     return { ok: false, error: 'No se pudo analizar la imagen del comprobante. Intenta con otra foto.' };
   }
@@ -148,10 +161,20 @@ export const extraerTextoComprobante = async (file, onProgress) => {
 // Ver limitación honesta al inicio del archivo: esto es una heurística de
 // densidad de texto + palabras clave, no reconocimiento visual real.
 const PALABRAS_COMPROBANTE = [
+  // Facturas / recibos de compra (tienda, POS)
   'total', 'precio total', 'total compra', 'total a pagar', 'total factura',
   'valor total', 'total venta', 'importe total', 'pago total',
   'factura', 'recibo', 'ticket', 'comprobante', 'nit', 'venta', 'subtotal',
   'iva', 'efectivo', 'cambio', 'caja', 'cliente', 'fecha',
+  // Comprobantes de transferencia entre personas (Nequi, Daviplata,
+  // Bancolombia y billeteras similares) — vocabulario distinto al de una
+  // factura de tienda, pero igual de válido como prueba de pago.
+  'transferencia', 'transferiste', 'transferencia exitosa', 'enviaste',
+  'enviado', 'envío exitoso', 'pago exitoso', 'transacción exitosa',
+  'transacción aprobada', 'aprobada', 'aprobado', 'exitosa', 'exitoso',
+  'destino', 'origen', 'cuenta destino', 'número de aprobación',
+  'referencia', 'número de referencia', 'nequi', 'daviplata', 'bancolombia',
+  'banco', 'llave', 'ahorros', 'cel destino',
 ];
 
 export const pareceComprobante = (texto) => {
@@ -174,12 +197,20 @@ const PALABRAS_TOTAL_PRIORIDAD = [
   { patron: /total\s+a\s+pagar/i,        peso: 100 },
   { patron: /total\s+factura/i,          peso: 95 },
   { patron: /total\s+venta/i,            peso: 90 },
+  { patron: /valor\s+de\s+la\s+transferencia/i, peso: 90 },
   { patron: /valor\s+total/i,            peso: 85 },
   { patron: /importe\s+total/i,          peso: 85 },
   { patron: /pago\s+total/i,             peso: 80 },
   { patron: /total\s+compra/i,           peso: 80 },
   { patron: /precio\s+total/i,           peso: 75 },
+  { patron: /monto\s+enviado/i,          peso: 70 },
   { patron: /\btotal\b/i,                peso: 50 },
+  // En comprobantes de transferencia (Nequi, Daviplata, Bancolombia) el
+  // monto casi nunca dice "total": suele ir junto a "Valor" o "Monto" a
+  // secas. Peso más bajo porque "valor"/"monto" solos son menos
+  // específicos que las frases de arriba.
+  { patron: /\bvalor\b/i,                peso: 40 },
+  { patron: /\bmonto\b/i,                peso: 40 },
 ];
 
 const parsearMonto = (str) => {
@@ -240,7 +271,16 @@ export const procesarComprobante = async (file, onProgress) => {
   }
 
   if (!pareceComprobante(texto)) {
-    return { ok: false, error: 'El archivo cargado no corresponde a un comprobante de compra válido.' };
+    // Si además la heurística de píxeles había marcado la imagen como
+    // sospechosa (muy oscura, muy clara o poco nítida), es más probable
+    // que el problema sea la calidad de la imagen que el contenido; se lo
+    // decimos al usuario para que sepa qué corregir.
+    return {
+      ok: false,
+      error: calidad.sospechosa
+        ? 'No pudimos leer el comprobante con claridad. Intenta con una foto más nítida, con buena luz y que muestre el comprobante completo.'
+        : 'El archivo cargado no corresponde a un comprobante de compra válido.',
+    };
   }
 
   const totalDetectado = detectarTotalComprobante(texto);

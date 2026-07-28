@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import pedidosService from '../features/pedidos/services/pedidosService';
 import clientesService from '../features/clientes/services/clientesService';
+import PedidoProgreso from '../shared/components/PedidoProgreso';
+import '../shared/components/PedidoProgreso.css';
 import './Landing.css';
 
 const fmt = n => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(n || 0);
-const METODOS_PAGO_LABEL = { nequi: 'Nequi', daviplata: 'Daviplata', transferencia: 'Transferencia Bancaria', efectivo: 'Efectivo en caja' };
-const estadoColor = { pendiente_verificacion: '#F57F17', pendiente: '#f59e0b', en_proceso: '#3b82f6', listo: '#10b981', entregado: '#6b7280', cancelado: '#ef4444' };
-const estadoLabel = { pendiente_verificacion: 'Verificando pago', pendiente: 'Pendiente', en_proceso: 'En proceso', listo: 'Listo', entregado: 'Entregado', cancelado: 'Cancelado' };
+const METODOS_PAGO_LABEL = { bancolombia: 'Bancolombia', nequi: 'Nequi', daviplata: 'Daviplata', transferencia: 'Transferencia Bancaria', efectivo: 'Efectivo en caja' };
+const estadoColor = { pendiente_verificacion: '#F57F17', pendiente: '#f59e0b', en_proceso: '#3b82f6', listo: '#10b981', en_camino: '#00838F', entregado: '#6b7280', cancelado: '#ef4444' };
+const estadoLabel = { pendiente_verificacion: 'Verificando pago', pendiente: 'Pendiente', en_proceso: 'En proceso', listo: 'Listo', en_camino: 'En camino', entregado: 'Entregado', cancelado: 'Cancelado' };
 
 // Página completa con el historial de pedidos del cliente (antes vivía como
 // una pestaña dentro del modal "Mi perfil"). "Volver a comprar" y
@@ -118,6 +120,11 @@ const MisPedidosPage = () => {
                   <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 100, background: estadoColor[p.estado] + '25', color: estadoColor[p.estado] }}>{estadoLabel[p.estado] || p.estado}</span>
                 </div>
                 {Array.isArray(p.productos) && p.productos.length > 0 && <div style={{ fontSize: 12, color: 'var(--lx-muted)', marginBottom: 6 }}>{p.productos.map(x => `${x.nombre || x} x${x.cantidad || 1}`).join(' · ')}</div>}
+                {p.estado !== 'entregado' && p.estado !== 'cancelado' && p.estado !== 'anulado' && (
+                  <div style={{ margin: '10px 0', padding: '10px 12px', borderRadius: 10, background: 'rgba(128,128,128,.06)' }}>
+                    <PedidoProgreso estado={p.estado} pago={p.pago} tipo={p.tipo} orientacion="horizontal" />
+                  </div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: 12, color: 'var(--lx-muted)' }}>{p.fechaCreacion || p.created_at ? new Date(p.fechaCreacion || p.created_at).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : ''}{p.hora ? ` · ${p.hora}` : ''}</span>
                   <span style={{ fontWeight: 700, fontSize: 14, color: '#4CAF50' }}>{fmt(p.total)}</span>

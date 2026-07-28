@@ -17,7 +17,11 @@ import devolucionesService from '../features/devoluciones/services/devolucionesS
 import notificacionesService from '../features/notificaciones/services/notificacionesService';
 import insumosService from '../features/insumos/services/insumosService';
 import fichasTecnicasService from '../features/fichasTecnicas/services/fichasTecnicasService';
-import { validarArchivoComprobante, procesarComprobante } from '../shared/services/ocrService';
+import { validarComprobanteCliente, procesarComprobante } from '../shared/services/ocrService';
+import PedidoProgreso from '../shared/components/PedidoProgreso';
+import '../shared/components/PedidoProgreso.css';
+import ImageLightbox from '../shared/components/ImageLightbox';
+import '../shared/components/ImageLightbox.css';
 import './Landing.css';
 
 const fmt = n => new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',minimumFractionDigits:0}).format(n||0);
@@ -149,6 +153,7 @@ function PasarelaPago({ cart, total, cliente, onClose, onSuccess, onCerrarFinal 
   const [metodo, setMetodo] = useState('');
   const [archivo, setArchivo] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [zoomComprobante, setZoomComprobante] = useState(false);
   const [loading, setLoading] = useState(false);
   const [totalConfirmado, setTotalConfirmado] = useState(0);
   const [numeroPedido] = useState(() => 'P-' + Date.now().toString().slice(-8));
@@ -158,13 +163,34 @@ function PasarelaPago({ cart, total, cliente, onClose, onSuccess, onCerrarFinal 
   const [errorPedido, setErrorPedido] = useState('');
   const fileRef = useRef();
 
+  // Datos de cada método de pago. titular/num/tipoCuenta se muestran en el
+  // paso de factura para que el cliente sepa exactamente a dónde transferir.
+  // Cuando el negocio confirme sus cuentas oficiales, solo hay que editar
+  // estos valores — el resto del flujo no cambia.
   const METODOS = [
-    { id:'nequi',         label:'Nequi',               num:'300 000 0000',       icon:'NQ' },
-    { id:'daviplata',     label:'Daviplata',            num:'300 000 0000',       icon:'DP' },
-    { id:'transferencia', label:'Transferencia Bancaria', num:'Cta: 123-456789-01', icon:'TB' },
-    { id:'efectivo',      label:'Efectivo en caja',    num:'Pagar al retirar',   icon:'EF' },
+    { id:'bancolombia', label:'Bancolombia', titular:'Café Don Berna S.A.S.', num:'300 000 0000', tipoCuenta:'Ahorros', icon:'BC' },
+    { id:'nequi',       label:'Nequi',       titular:'Café Don Berna S.A.S.', num:'300 000 0000', tipoCuenta:null,      icon:'NQ' },
+    { id:'daviplata',   label:'Daviplata',   titular:'Café Don Berna S.A.S.', num:'300 000 0000', tipoCuenta:null,      icon:'DP' },
+    { id:'efectivo',    label:'Efectivo en caja', titular:null, num:'Pagar al retirar', tipoCuenta:null, icon:'EF' },
   ];
   const metodoSel = METODOS.find(m => m.id === metodo);
+  const [numeroCopiado, setNumeroCopiado] = useState(false);
+  const copiarNumero = async () => {
+    if (!metodoSel?.num) return;
+    try {
+      await navigator.clipboard.writeText(metodoSel.num);
+    } catch {
+      // Fallback si el navegador bloquea la Clipboard API (ej. sin HTTPS).
+      const ta = document.createElement('textarea');
+      ta.value = metodoSel.num;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch {}
+      document.body.removeChild(ta);
+    }
+    setNumeroCopiado(true);
+    setTimeout(() => setNumeroCopiado(false), 2000);
+  };
 
   const generarFilasFactura = () => {
     const filas = [];
@@ -369,26 +395,17 @@ function PasarelaPago({ cart, total, cliente, onClose, onSuccess, onCerrarFinal 
   const procesarArchivoSeleccionado = async f => {
     setOcrError(''); setOcrOk(false); setOcrTotalDetectado(null);
 
-    const check = validarArchivoComprobante(f);
+    const check = validarComprobanteCliente(f);
     if (!check.valid) { setOcrError(check.error); return; }
 
     setArchivo(f);
     setPreview({ url: URL.createObjectURL(f), type: f.type });
-    // Convertimos a base64 solo si es imagen (los PDF pesan demasiado para
-    // guardarlos en localStorage) para que el admin pueda verla después.
-    if (f.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = () => setComprobanteB64(reader.result);
-      reader.readAsDataURL(f);
-    } else {
-      setComprobanteB64(null);
-    }
+    // Solo se aceptan imágenes en este flujo (JPG/JPEG/PNG/WEBP), así que
+    // siempre podemos convertir a base64 para que el admin la vea después.
+    const reader = new FileReader();
+    reader.onload = () => setComprobanteB64(reader.result);
+    reader.readAsDataURL(f);
 
-    if (check.requiereConversion) {
-      // PDF: esta versión no lo convierte a imagen para el análisis OCR.
-      setOcrError('No podemos verificar automáticamente un PDF. Sube una foto o captura de pantalla en JPG o PNG del comprobante.');
-      return;
-    }
     if (!total || total <= 0) {
       // Defensivo: no debería pasar aquí sin un total de pedido válido.
       setOcrError('No se pudo determinar el total del pedido para comparar.');
@@ -445,7 +462,16 @@ function PasarelaPago({ cart, total, cliente, onClose, onSuccess, onCerrarFinal 
               </div>
             )}
             <div className="pay-success__total">Total: {fmt(totalConfirmado)}</div>
-            <button className="lx-btn lx-btn--full" onClick={() => (onCerrarFinal ? onCerrarFinal() : onSuccess())} style={{marginTop:24}}>Cerrar</button>
+            <div style={{width:'100%',marginTop:22,textAlign:'left',background:'var(--lx-surface-2,#F7F7F7)',borderRadius:12,padding:'16px 18px'}}>
+              <div style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:1,color:'var(--lx-muted)',marginBottom:10}}>Estado de tu pedido</div>
+              <PedidoProgreso
+                estado={metodo === 'efectivo' ? 'pendiente' : 'pendiente_verificacion'}
+                pago={metodo}
+                tipo={tipoEntrega}
+                orientacion="vertical"
+              />
+            </div>
+            <button className="lx-btn lx-btn--full" onClick={() => (onCerrarFinal ? onCerrarFinal() : onSuccess())} style={{marginTop:16}}>Cerrar</button>
           </div>
         ) : (
           <>
@@ -530,6 +556,12 @@ function PasarelaPago({ cart, total, cliente, onClose, onSuccess, onCerrarFinal 
                       </span>
                     </div>
                   ))}
+                  {tipoEntrega === 'domicilio' && (
+                    <div className="pay-cart-row" style={{opacity:0.85}}>
+                      <span style={{fontSize:12}}>🛵 Valor del domicilio</span>
+                      <span style={{fontSize:12,color:'#4CAF50',fontWeight:700}}>Gratis</span>
+                    </div>
+                  )}
                   <div className="pay-cart-total"><span>Total</span><strong>{fmt(total)}</strong></div>
                 </div>
                 {errorPedido && (
@@ -567,7 +599,27 @@ function PasarelaPago({ cart, total, cliente, onClose, onSuccess, onCerrarFinal 
                 </div>
                 <div style={{background:"var(--lx-green-bg)",border:"1.5px solid rgba(76,175,80,0.3)",borderRadius:12,padding:"14px 16px",marginBottom:8}}>
                   <div style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:"uppercase",color:"var(--lx-green-dd)",marginBottom:6}}>Paga con {metodoSel?.label}</div>
-                  <div style={{fontSize:15,fontWeight:700,color:"var(--lx-text)"}}>{metodoSel?.num}</div>
+                  {metodoSel?.titular && (
+                    <div style={{fontSize:12.5,color:"var(--lx-muted)",marginBottom:6}}>
+                      Titular: <strong style={{color:"var(--lx-text)"}}>{metodoSel.titular}</strong>
+                    </div>
+                  )}
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                    <div style={{fontSize:15,fontWeight:700,color:"var(--lx-text)"}}>{metodoSel?.num}</div>
+                    {metodo!=='efectivo' && (
+                      <button type="button" onClick={copiarNumero}
+                        style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700,color:numeroCopiado?"#4CAF50":"var(--lx-green-dd)",background:"rgba(76,175,80,0.12)",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",whiteSpace:"nowrap"}}>
+                        {numeroCopiado ? (
+                          <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>¡Copiado!</>
+                        ) : (
+                          <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copiar número</>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                  {metodoSel?.tipoCuenta && (
+                    <div style={{fontSize:12,color:"var(--lx-muted)",marginTop:6}}>Tipo de cuenta: {metodoSel.tipoCuenta}</div>
+                  )}
                 </div>
                 <button type="button" onClick={imprimirFactura} style={{display:"flex",alignItems:"center",gap:8,fontSize:13,fontWeight:600,color:"var(--lx-green-dd)",background:"none",border:"none",cursor:"pointer",padding:"8px 0",marginBottom:8}}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
@@ -575,7 +627,9 @@ function PasarelaPago({ cart, total, cliente, onClose, onSuccess, onCerrarFinal 
                 </button>
                 <div style={{display:"flex",gap:12,marginTop:8}}>
                   <button className="btn-cancel" onClick={() => setStep(3)}>← Atrás</button>
-                  <button className="lx-btn" style={{flex:1,justifyContent:"center"}} onClick={() => setStep(5)}>Ya pagué, continuar →</button>
+                  <button className="lx-btn" style={{flex:1,justifyContent:"center"}} onClick={() => setStep(5)}>
+                    {metodo==='efectivo' ? 'Continuar →' : 'Ya realicé la transferencia →'}
+                  </button>
                 </div>
               </div>
             )}
@@ -622,8 +676,8 @@ function PasarelaPago({ cart, total, cliente, onClose, onSuccess, onCerrarFinal 
                   <div style={{display:"flex",alignItems:"center",gap:10}}>
                     <span style={{fontSize:22}}>📎</span>
                     <div>
-                      <div style={{fontWeight:700,fontSize:13}}>Subir imagen / PDF</div>
-                      <div style={{fontSize:12,color:"#888"}}>Adjunta aquí el pantallazo o PDF del comprobante.</div>
+                      <div style={{fontWeight:700,fontSize:13}}>Subir imagen</div>
+                      <div style={{fontSize:12,color:"#888"}}>Adjunta aquí el pantallazo del comprobante (JPG, PNG o WEBP).</div>
                     </div>
                     {modoComprobante==='archivo' && <span style={{marginLeft:"auto",color:"#4CAF50",fontWeight:800}}>✓</span>}
                   </div>
@@ -637,21 +691,32 @@ function PasarelaPago({ cart, total, cliente, onClose, onSuccess, onCerrarFinal 
                         style={arrastrando ? { borderColor: 'var(--lx-green,#4CAF50)', background: 'rgba(76,175,80,0.06)' } : undefined}
                       >
                         {preview ? (
-                          preview.type==="application/pdf"
-                            ? <div className="pay-upload__pdf">
-                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#E53935" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                                <span>{archivo.name}</span>
-                              </div>
-                            : <img src={preview.url} alt="comprobante" className="pay-upload__img"/>
+                          <div style={{position:'relative',width:'100%',height:'100%'}}>
+                            <img src={preview.url} alt="comprobante" className="pay-upload__img"/>
+                            <button type="button" className="ilb-zoom-trigger" title="Ver completo / Zoom"
+                              onClick={e => { e.stopPropagation(); setZoomComprobante(true); }}>
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                            </button>
+                          </div>
                         ) : (
                           <div className="pay-upload__placeholder">
                             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                             <span>Arrastra tu comprobante aquí, o haz clic para subir</span>
-                            <small>JPG, PNG o PDF</small>
+                            <small>JPG, PNG o WEBP · máx. 5 MB</small>
                           </div>
                         )}
                       </div>
-                      <input ref={fileRef} type="file" accept="image/*,application/pdf" style={{display:"none"}} onChange={handleFile}/>
+                      {preview && (
+                        <button type="button" onClick={e => { e.stopPropagation(); setZoomComprobante(true); }}
+                          style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,width:'100%',marginTop:8,padding:'7px 0',borderRadius:8,border:'1.5px solid var(--lx-border)',background:'transparent',color:'var(--lx-text)',fontWeight:600,fontSize:12,cursor:'pointer'}}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                          Ver comprobante completo
+                        </button>
+                      )}
+                      {zoomComprobante && preview && (
+                        <ImageLightbox src={preview.url} alt="Comprobante de pago" onClose={() => setZoomComprobante(false)} />
+                      )}
+                      <input ref={fileRef} type="file" accept="image/jpeg,image/jpg,image/png,image/webp" style={{display:"none"}} onChange={handleFile}/>
 
                       {ocrProcesando && (
                         <div style={{marginTop:12,padding:"12px 14px",borderRadius:10,background:"var(--lx-surface-2, #F5F5F5)",border:"1px solid rgba(0,0,0,.06)"}}>
@@ -1031,7 +1096,7 @@ export default function Landing() {
   // "Ver factura": abre una ventana imprimible con el detalle completo de
   // un pedido pasado (productos, toppings/adiciones, total y método de pago),
   // para que el cliente pueda confirmar exactamente qué y cuánto pagó.
-  const METODOS_PAGO_LABEL = { nequi:'Nequi', daviplata:'Daviplata', transferencia:'Transferencia Bancaria', efectivo:'Efectivo en caja' };
+  const METODOS_PAGO_LABEL = { bancolombia:'Bancolombia', nequi:'Nequi', daviplata:'Daviplata', transferencia:'Transferencia Bancaria', efectivo:'Efectivo en caja' };
   const verFacturaPedido = (pedido) => {
     const w = window.open('', '_blank');
     if (!w) { showToast('Habilita las ventanas emergentes para ver la factura'); return; }
